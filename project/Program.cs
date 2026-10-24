@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Linq;
 
 namespace Budgeteer
 {
@@ -16,6 +17,7 @@ namespace Budgeteer
     //Objekt för grupp, som i sin tur ska lagras i GroupList
     class Group
     {
+        public int groupID { get; set; }
         public string Name { get; set; }
         public string[] Members { get; set; }
         public string Currency { get; set; }
@@ -30,10 +32,12 @@ namespace Budgeteer
     //Objekt för Expense, som i sin tur lagras i expenselist.
     class Expense
     {
+        public int groupID { get; set; }
+        public int expID { get; set; }
         public string expName { get; set; }
         public string[] expMembers { get; set; }
-        public string Currency { get; set; }
-        public decimal Amount { get; set; }
+        public string expCurrency { get; set; }
+        public decimal expAmount { get; set; }
     }
     class Program
     {
@@ -113,7 +117,7 @@ namespace Budgeteer
                     for (int i = 0; i < groupList.groups.Count; i++)
                     {
                         var group = groupList.groups[i];
-                        Console.WriteLine($"[{i}] {group.Name}");
+                        Console.WriteLine($"[{group.groupID}] {group.Name}");
                     }
                 }
 
@@ -160,6 +164,8 @@ namespace Budgeteer
                             Console.WriteLine("Edit group option selected.");
                             break;
                         case ConsoleKey.C:
+                            Console.Clear();
+
                             Console.WriteLine("Create Group");
                             Console.Write("Enter groupname: ");
                             string groupname = Console.ReadLine();
@@ -171,10 +177,8 @@ namespace Budgeteer
 
                             Console.Clear();
                             Console.WriteLine("Create Group");
-                            Console.Write("Enter currency to be used: ");
+                            Console.Write("Enter currency to be used (USD, EUR, GBP): ");
                             string currencyInput = Console.ReadLine();
-
-                            Console.WriteLine("Enter currency as international abbrevation (SEK, CNY, EUR)");
 
                             if (!string.IsNullOrWhiteSpace(groupname) &&
                                 !string.IsNullOrWhiteSpace(memberInput) &&
@@ -187,6 +191,10 @@ namespace Budgeteer
 
                                 Group newGroup = new Group
                                 {
+                                    groupID = groupList.groups
+                                        .Select(e => e.groupID)
+                                        .DefaultIfEmpty(0)
+                                        .Max() + 1,
                                     Name = groupname,
                                     Members = members,
                                     Currency = currencyInput
@@ -299,15 +307,50 @@ namespace Budgeteer
                             Console.Clear();
                             Console.WriteLine("Create new expense");
                             Console.WriteLine();
+                            Console.Write("Enter currency (USD, EUR, GBP etc): ");
+                            string expCurrencyInput = Console.ReadLine();
+
+                            Console.WriteLine($"Currencies not being the main currency of the group ({group.Currency}) will be automatically converted.");
+
+                            Console.Write("Enter expense amount: ");
+
+                            //Om talet kan omvandlas till decimal, sätt värdet till expAmountInput.
+                            if (!decimal.TryParse(Console.ReadLine(), out decimal expAmountInput))
+                            {
+                                Console.WriteLine("Invalid amount.");
+                                break;
+                            }
+
+                            //Kolla mot gruppens currency.
+                            if (!string.Equals(
+                                    expCurrencyInput,
+                                    group.Currency,
+                                    StringComparison.OrdinalIgnoreCase))
+                            {
+
+                            }
 
                             if (!string.IsNullOrWhiteSpace(expNameInput) &&
-                               !string.IsNullOrWhiteSpace(expMembersInput))
+                               !string.IsNullOrWhiteSpace(expMembersInput) &&
+                               !string.IsNullOrWhiteSpace(expCurrencyInput) &&
+                               expAmountInput != null)
                             {
                                 string[] expMembers = expMembersInput.Split(',',
                                     StringSplitOptions.TrimEntries |
                                     StringSplitOptions.RemoveEmptyEntries
                                     );
 
+                                Expense newExpense = new Expense
+                                {
+                                    expID = expenseList.expenses
+                                        .Select(e => e.expID)
+                                        .DefaultIfEmpty(0)
+                                        .Max() + 1,
+                                    expName = expNameInput,
+                                    expMembers = expMembers,
+                                    expCurrency = expCurrencyInput,
+                                    expAmount = expAmountInput
+                                };
                             }
 
                                 break;
@@ -333,8 +376,8 @@ namespace Budgeteer
                     $"Members: {string.Join(", ", expense.expMembers)}"
                 );
                 Console.WriteLine($"Expense: {expense.expName}");
-                Console.WriteLine($"Amount: {expense.Amount}");
-                Console.WriteLine($"Currency: {expense.Currency}");
+                Console.WriteLine($"Amount: {expense.expAmount}");
+                Console.WriteLine($"Currency: {expense.expCurrency}");
 
 
                 Console.WriteLine();
