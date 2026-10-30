@@ -39,6 +39,8 @@ namespace Budgeteer
         public decimal expAmount { get; set; }
         public decimal convertedAmount { get; set; }
         public string convertedCurrency { get; set; }
+
+        public DateTime expDate { get; set; } = DateTime.Today;
     }
 
     class readEnv
@@ -140,9 +142,6 @@ namespace Budgeteer
                 GroupList groupList = new GroupList();
                 ExpenseList expenseList = new ExpenseList();
 
-
-
-
                 //Försök läs in textfiler med information. Catch längst ned som fångar felet.
                 try
                 {
@@ -175,19 +174,16 @@ namespace Budgeteer
                     Console.WriteLine(err.Message);
                     Console.ReadKey();
                 }
-
-
             }
 
             static string ReadInputOrCancel(string prompt)
             {
 
                 Console.Write(prompt);
-                string input = null;
+                string input = "";
 
                 while (true)
                 {
-
                     ConsoleKeyInfo key = Console.ReadKey(true);
 
                     // Avbryt inmatningen med ESC
@@ -198,24 +194,24 @@ namespace Budgeteer
                     }
 
                     // Avsluta inmatningen med ENTER
-                    if (key.Key == ConsoleKey.Enter)
+                    else if (key.Key == ConsoleKey.Enter)
                     {
                         Console.WriteLine();
                         return input;
                     }
 
                     // Ta bort det senaste tecknet med BACKSPACE
-                    if (key.Key == ConsoleKey.Backspace)
+                    else if (key.Key == ConsoleKey.Backspace)
                     {
                         if (input.Length > 0)
                         {
                             input = input.Substring(0, input.Length - 1);
-
                             Console.Write("\b \b");
                         }
                     }
 
-                    if (!char.IsControl(key.KeyChar))
+                    // Lägg till vanliga tecken
+                    else if (!char.IsControl(key.KeyChar))
                     {
                         input += key.KeyChar;
                         Console.Write(key.KeyChar);
@@ -225,17 +221,11 @@ namespace Budgeteer
             }
 
 
-
-
-
-
             //Main menu funktion. Denna kallas automatiskt, förutsatt att .txt filerna hittas.
             static async Task MainMenu(
                 GroupList groupList,
                 ExpenseList expenseList)
             {
-
-
 
                 //True är alltid true, så detta körs hela tiden. 
                 while (true)
@@ -318,6 +308,8 @@ namespace Budgeteer
 
                         case ConsoleKey.E:
                             Console.WriteLine("Edit group option selected.");
+
+
                             break;
                         case ConsoleKey.C:
 
@@ -602,24 +594,41 @@ namespace Budgeteer
 
                         var groupExpenses = expenseList.expenses
                             .Where(e => e.groupID == group.groupID)
+                            .OrderByDescending(e => e.expDate)
+                            .ThenByDescending(e => e.expID)
                             .ToList();
 
-                        Console.WriteLine("Enter number to view expense details");
-                        Console.WriteLine("Expenses:");
-                        Console.WriteLine();
-                        Console.WriteLine();
 
 
-                        for (int i = 0; i < groupExpenses.Count; i++)
+                        if (groupExpenses.Count == 0)
                         {
-                            var expense = groupExpenses[i];
+                            Console.Write("No expenses yet. Press C to start creating!");
+                            Console.WriteLine();
+                            Console.WriteLine();
 
-                            Console.WriteLine(
-                                $"[{i + 1}] {expense.expName}, " +
-                                $"{Math.Round(expense.convertedAmount, 2)} " +
-                                $"{expense.convertedCurrency}"
-                            );
                         }
+                        else
+                        {
+                            Console.WriteLine("Enter number to view expense details");
+
+                            Console.WriteLine();
+                            Console.WriteLine();
+
+
+                            for (int i = 0; i < groupExpenses.Count; i++)
+                            {
+                                var expense = groupExpenses[i];
+
+                                Console.WriteLine(
+                                    $"[{i + 1}] {expense.expDate:yyyy-MM-dd} - " +
+                                    $"{expense.expName} " +
+                                    $"{Math.Round(expense.convertedAmount, 2)} " +
+                                    $"{expense.convertedCurrency}"
+                                );
+                            }
+                        }
+
+                       
 
 
 
@@ -797,6 +806,49 @@ namespace Budgeteer
                                             Console.ReadKey();
                                             break;
                                         }
+
+
+                                    }
+
+                                    Console.WriteLine();
+                                    Console.WriteLine("Enter expense date.");
+                                    Console.WriteLine("Leave empty to use todays date");
+                                    Console.WriteLine("Format: yyyy-MM-dd");
+
+                                    DateTime expenseDate;
+
+                                    while (true)
+                                    {
+                                        string? dateInput = ReadInputOrCancel(
+                                            $"Date ({DateTime.Today:yyyy-MM-dd}): ");
+
+                                        if (dateInput == null)
+                                        {
+                                            //ESC
+                                            return;
+                                        }
+
+                                        if (string.IsNullOrWhiteSpace(dateInput))
+                                        {
+                                            //Tom och ENTER = dagens datum
+                                            expenseDate = DateTime.Today;
+                                            break;
+                                        }
+
+                                        //kolla om input uppfyller datumets format
+                                        if (DateTime.TryParseExact(
+                                            dateInput,
+                                            "yyyy-MM-dd",
+                                            System.Globalization.CultureInfo.InvariantCulture,
+                                            System.Globalization.DateTimeStyles.None,
+                                            out expenseDate))
+                                        {
+                                            //Datumet är giltigt
+                                            break;
+                                        }
+
+                                        //Om inget krav uppfylls
+                                        Console.WriteLine("Date format invalid, please use 'yyyy-MM-dd'.");
                                     }
 
                                     // Bekräfta innan expense sparas
@@ -826,7 +878,8 @@ namespace Budgeteer
                                         expCurrency = expCurrencyInput,
                                         expAmount = expAmountInput,
                                         convertedAmount = convertedAmount,
-                                        convertedCurrency = group.Currency
+                                        convertedCurrency = group.Currency,
+                                        expDate = expenseDate
                                     };
 
                                     //Lägg till och spara
