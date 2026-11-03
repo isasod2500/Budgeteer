@@ -306,7 +306,78 @@ namespace Budgeteer
                     switch (userInput.ToUpperInvariant())
                     {
 
+                        case "C":
+                            {
+                                Console.Clear();
+                                Console.WriteLine("Create group");
+                                Console.WriteLine("Press ESC to cancel.");
+                                Console.WriteLine();
 
+                                string? groupName = ReadInputOrCancel("Enter group name: ");
+
+                                if (groupName == null)
+                                    break;
+
+                                if (string.IsNullOrWhiteSpace(groupName))
+                                {
+                                    Console.WriteLine("Group name cannot be empty.");
+                                    Console.ReadKey(true);
+                                    break;
+                                }
+
+                                string? membersInput = ReadInputOrCancel("Enter members (separated by commas): ");
+
+                                if (membersInput == null)
+                                    break;
+
+                                string[] members = membersInput.Split(
+                                    ',',
+                                    StringSplitOptions.TrimEntries |
+                                    StringSplitOptions.RemoveEmptyEntries);
+
+                                if (members.Length == 0)
+                                {
+                                    Console.WriteLine("You must enter at least one member.");
+                                    Console.ReadKey(true);
+                                    break;
+                                }
+
+                                string? currencyInput = ReadInputOrCancel("Enter currency (e.g. EUR, USD, SEK): ");
+
+                                if (currencyInput == null)
+                                    break;
+
+                                string currency = currencyInput.Trim().ToUpperInvariant();
+
+                                if (!await readEnv.IsValidCurrency(currency))
+                                {
+                                    Console.WriteLine("Invalid currency.");
+                                    Console.ReadKey(true);
+                                    break;
+                                }
+
+                                // Skapa ett unikt grupp-ID
+                                int newGroupID = groupList.groups.Count == 0
+                                    ? 1
+                                    : groupList.groups.Max(g => g.groupID) + 1;
+
+                                Group newGroup = new Group
+                                {
+                                    groupID = newGroupID,
+                                    Name = groupName.Trim(),
+                                    Members = members,
+                                    Currency = currency
+                                };
+
+                                groupList.groups.Add(newGroup);
+
+                                string json = JsonSerializer.Serialize(groupList.groups);
+                                await File.WriteAllTextAsync("groups.txt", json);
+
+                                Console.WriteLine("Group created successfully!");
+                                Console.ReadKey(true);
+                                break;
+                            }
                         case "E":
                             {
                                 Console.Clear();
@@ -642,6 +713,7 @@ namespace Budgeteer
                                     $"{Math.Round(expense.convertedAmount, 2)} " +
                                     $"{expense.convertedCurrency}"
                                 );
+                                Console.WriteLine();
                             }
                         }
 
