@@ -273,15 +273,16 @@ namespace Budgeteer
                     Console.WriteLine();
 
                     //Tar användarens val
-                    Console.Write("Enter option here: ");
-                    var userInput = Console.ReadKey(true);
+                    string? userInput = ReadInputOrCancel("Enter option here: ");
+
+                    if (userInput == null)
+                        return;
+
+                    userInput = userInput.Trim();
 
                     //Gruppval, index 0-9
-                    if (char.IsDigit(userInput.KeyChar) &&
-                            userInput.KeyChar >= '1' &&
-                            userInput.KeyChar <= '9')
+                    if (int.TryParse(userInput, out int groupNumber))
                     {
-                        int groupNumber = userInput.KeyChar - '0';
                         int groupIndex = groupNumber - 1;
 
                         if (groupIndex >= 0 &&
@@ -299,15 +300,14 @@ namespace Budgeteer
                         }
 
                         continue;
-
                     }
 
                     //Switch-case för redigering av grupper
-                    switch (userInput.Key)
+                    switch (userInput.ToUpperInvariant())
                     {
 
 
-                        case ConsoleKey.E:
+                        case "E":
                             {
                                 Console.Clear();
                                 Console.WriteLine("Edit group");
@@ -453,7 +453,7 @@ namespace Budgeteer
                                 Console.ReadKey(true);
                                 break;
                             }
-                        case ConsoleKey.D:
+                        case "D":
                             Console.Clear();
                             Console.WriteLine("Delete group option selected.");
                             Console.WriteLine("Choose group to delete using numpad.");
@@ -532,8 +532,7 @@ namespace Budgeteer
 
                             break;
 
-                        case ConsoleKey.Escape:
-                            return; // Exit the application
+                      
                         default:
                             Console.WriteLine("Invalid option. Please try again.");
                             break;
@@ -663,20 +662,22 @@ namespace Budgeteer
                         Console.WriteLine();
 
                         //Tar användarens val
-                        Console.Write("Enter option here: ");
-                        var userInput = Console.ReadKey(true);
+                        string? userInput = ReadInputOrCancel("Enter option here: ");
 
-                        if (char.IsDigit(userInput.KeyChar) &&
-                        userInput.KeyChar >= '1' &&
-                        userInput.KeyChar <= '9')
+                        if (userInput == null)
+                            return;
+
+                        userInput = userInput.Trim();
+
+                        if (int.TryParse(userInput, out int expenseNumber))
                         {
-                            int expenseNumber = userInput.KeyChar - '0';
                             int expenseIndex = expenseNumber - 1;
 
                             if (expenseIndex >= 0 &&
                                 expenseIndex < groupExpenses.Count)
                             {
-                                await ExpenseMenu(groupExpenses[expenseIndex],
+                                await ExpenseMenu(
+                                    groupExpenses[expenseIndex],
                                     expenseList);
                             }
                             else
@@ -690,10 +691,10 @@ namespace Budgeteer
 
 
                         //Switch-case för redigering av utgifter
-                        switch (userInput.Key)
+                        switch (userInput.ToUpperInvariant())
                         {
 
-                            case ConsoleKey.C:
+                            case "C":
                                 {
                                     Console.Clear();
                                     Console.WriteLine("Create new expense");
@@ -911,8 +912,6 @@ namespace Budgeteer
 
                                     break;
                                 }
-                            case ConsoleKey.Escape:
-                                return;
                             default:
                                 Console.WriteLine("Invalid option. Please try again.");
                                 break;
