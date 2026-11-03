@@ -256,8 +256,8 @@ namespace Budgeteer
                     {
                         for (int i = 0; i < groupList.groups.Count; i++)
                         {
-                            var group = groupList.groups[i];
-                            Console.WriteLine($"[{i + 1}] {group.Name}");
+                            var listedGroup = groupList.groups[i];
+                            Console.WriteLine($"[{i + 1}] {listedGroup.Name}");
                         }
                     }
 
@@ -306,143 +306,153 @@ namespace Budgeteer
                     switch (userInput.Key)
                     {
 
+
                         case ConsoleKey.E:
-                            Console.WriteLine("Edit group option selected.");
-
-
-                            break;
-                        case ConsoleKey.C:
-
-                            // Ange gruppnamn
-                            string groupnameInput;
-
-                            while (true)
                             {
                                 Console.Clear();
-                                Console.WriteLine("Create Group");
+                                Console.WriteLine("Edit group");
                                 Console.WriteLine();
 
-                                groupnameInput = ReadInputOrCancel(
-                                    "Enter groupname (min 3 characters): ");
-
-                                // ESC avbryter skapandet
-                                if (groupnameInput == null)
-                                    break;
-
-                                if (groupnameInput.Trim().Length >= 3)
-                                    break;
-
-                                Console.WriteLine("Group name must be at least 3 characters.");
-                                Console.ReadKey(true);
-                            }
-
-                            // Om användaren tryckte ESC, avbryt hela skapandet
-                            if (groupnameInput == null)
-                                break;
-
-
-                            // Ange medlemmar
-                            string memberInput;
-
-                            while (true)
-                            {
-                                Console.Clear();
-                                Console.WriteLine("Create Group");
-                                Console.WriteLine();
-
-                                memberInput = ReadInputOrCancel(
-                                    "Enter members (comma separated): ");
-
-                                if (memberInput == null)
-                                    break;
-
-                                if (!string.IsNullOrWhiteSpace(memberInput))
-                                    break;
-
-                                Console.WriteLine("Enter at least one member.");
-                                Console.ReadKey(true);
-                            }
-
-                            if (memberInput == null)
-                                break;
-
-
-                            // Ange valuta
-                            string currencyInput;
-
-                            while (true)
-                            {
-                                Console.Clear();
-                                Console.WriteLine("Create Group");
-                                Console.WriteLine();
-
-                                currencyInput = ReadInputOrCancel(
-                                    "Enter currency to be used (USD, EUR, GBP): ");
-
-                                if (currencyInput == null)
-                                    break;
-
-                                currencyInput = currencyInput.Trim().ToUpperInvariant();
-
-                                if (currencyInput.Length != 3 ||
-                                    !currencyInput.All(char.IsLetter))
+                                if (groupList.groups.Count == 0)
                                 {
-                                    Console.WriteLine("Enter a three-letter currency code; SEK, EUR, USD etc.");
+                                    Console.WriteLine("There are no groups to edit.");
                                     Console.ReadKey(true);
-                                    continue;
+                                    break;
                                 }
 
-                                if (!await readEnv.IsValidCurrency(currencyInput))
+                                // Visa alla grupper
+                                for (int i = 0; i < groupList.groups.Count; i++)
                                 {
-                                    Console.WriteLine($"{currencyInput} is not a valid three-letter currency code.");
-                                    Console.ReadKey(true);
-                                    continue;
+                                    var listedGroup = groupList.groups[i];
+                                    Console.WriteLine($"[{i + 1}] {listedGroup.Name}");
                                 }
 
-                                break;
-                            }
+                                Console.WriteLine();
+                                Console.WriteLine("Choose a group to edit.");
+                                Console.WriteLine("Press ESC to cancel.");
 
-                            if (currencyInput == null)
-                                break;
+                                var editInput = Console.ReadKey(true);
 
+                                if (editInput.Key == ConsoleKey.Escape)
+                                    break;
 
-                            // Skapa gruppen först när alla fält är godkända
-                            string[] members = memberInput.Split(',',
-                                StringSplitOptions.TrimEntries |
-                                StringSplitOptions.RemoveEmptyEntries);
+                                int editGroupNumber = 0;
 
-                            // Kontrollera att minst en medlem finns efter uppdelningen
-                            if (members.Length == 0)
-                            {
-                                Console.WriteLine("Enter at least one member.");
+                                if (editInput.Key >= ConsoleKey.D1 &&
+                                    editInput.Key <= ConsoleKey.D9)
+                                {
+                                    editGroupNumber = editInput.KeyChar - '0';
+                                }
+                                else if (editInput.Key >= ConsoleKey.NumPad1 &&
+                                         editInput.Key <= ConsoleKey.NumPad9)
+                                {
+                                    editGroupNumber = editInput.Key - ConsoleKey.NumPad0;
+                                }
+                                else
+                                {
+                                    Console.WriteLine("Please enter a group number.");
+                                    Console.ReadKey(true);
+                                    break;
+                                }
+
+                                int editGroupIndex = editGroupNumber - 1;
+
+                                if (editGroupIndex < 0 ||
+                                    editGroupIndex >= groupList.groups.Count)
+                                {
+                                    Console.WriteLine("Invalid group number.");
+                                    Console.ReadKey(true);
+                                    break;
+                                }
+
+                                // Hämta gruppen som ska redigeras
+                                Group selectedGroup = groupList.groups[editGroupIndex];
+
+                                Console.Clear();
+                                Console.WriteLine("Edit group");
+                                Console.WriteLine("Press ENTER to keep the current value.");
+                                Console.WriteLine("Press ESC to cancel editing.");
+                                Console.WriteLine();
+
+                                string? groupNameInput = ReadInputOrCancel(
+                                    $"Group name ({selectedGroup.Name}): ");
+
+                                if (groupNameInput == null)
+                                    break;
+
+                                string? groupMembersInput = ReadInputOrCancel(
+                                    $"Members ({string.Join(", ", selectedGroup.Members)}): ");
+
+                                if (groupMembersInput == null)
+                                    break;
+
+                                string? groupCurrencyInput = ReadInputOrCancel(
+                                    $"Currency ({selectedGroup.Currency}): ");
+
+                                if (groupCurrencyInput == null)
+                                    break;
+
+                                // Hantera gruppens namn
+                                string newName;
+
+                                if (string.IsNullOrWhiteSpace(groupNameInput))
+                                    newName = selectedGroup.Name;
+                                else
+                                    newName = groupNameInput.Trim();
+
+                                // Hantera gruppens medlemmar
+                                string[] newMembers;
+
+                                if (string.IsNullOrWhiteSpace(groupMembersInput))
+                                    newMembers = selectedGroup.Members;
+                                else
+                                    newMembers = groupMembersInput.Split(
+                                        ',',
+                                        StringSplitOptions.TrimEntries |
+                                        StringSplitOptions.RemoveEmptyEntries);
+
+                                // Hantera gruppens valuta
+                                string newCurrency;
+
+                                if (string.IsNullOrWhiteSpace(groupCurrencyInput))
+                                    newCurrency = selectedGroup.Currency;
+                                else
+                                    newCurrency = groupCurrencyInput.Trim().ToUpperInvariant();
+
+                                // Validera informationen
+                                if (string.IsNullOrWhiteSpace(newName))
+                                {
+                                    Console.WriteLine("Group name cannot be empty.");
+                                    Console.ReadKey(true);
+                                    break;
+                                }
+
+                                if (newMembers.Length == 0)
+                                {
+                                    Console.WriteLine("You must enter at least one member.");
+                                    Console.ReadKey(true);
+                                    break;
+                                }
+
+                                if (!await readEnv.IsValidCurrency(newCurrency))
+                                {
+                                    Console.WriteLine("Invalid currency.");
+                                    Console.ReadKey(true);
+                                    break;
+                                }
+
+                                // Spara ändringarna
+                                selectedGroup.Name = newName;
+                                selectedGroup.Members = newMembers;
+                                selectedGroup.Currency = newCurrency;
+
+                                string json = JsonSerializer.Serialize(groupList.groups);
+                                await File.WriteAllTextAsync("groups.txt", json);
+
+                                Console.WriteLine("Group updated successfully!");
                                 Console.ReadKey(true);
                                 break;
                             }
-
-                            Group newGroup = new Group
-                            {
-                                groupID = groupList.groups
-                                    .Select(g => g.groupID)
-                                    .DefaultIfEmpty(0)
-                                    .Max() + 1,
-
-                                Name = groupnameInput.Trim(),
-                                Members = members,
-                                Currency = currencyInput
-                            };
-
-                            groupList.groups.Add(newGroup);
-
-                            // Spara grupperna till fil
-                            string jsonAdd = JsonSerializer.Serialize(groupList.groups);
-                            File.WriteAllText("groups.txt", jsonAdd);
-
-                            Console.WriteLine();
-                            Console.WriteLine($"Group '{newGroup.Name}' created successfully!");
-                            Console.WriteLine("Press any key to continue...");
-                            Console.ReadKey(true);
-
-                            break;
                         case ConsoleKey.D:
                             Console.Clear();
                             Console.WriteLine("Delete group option selected.");
@@ -463,8 +473,8 @@ namespace Budgeteer
 
                             for (int i = 0; i < groupList.groups.Count; i++)
                             {
-                                var group = groupList.groups[i];
-                                Console.WriteLine($"[{i + 1}] {group.Name}");
+                                var listedGroup = groupList.groups[i];
+                                Console.WriteLine($"[{i + 1}] {listedGroup.Name}");
                             }
                             Console.WriteLine();
                             Console.WriteLine("Press ESC to cancel.");
@@ -598,6 +608,14 @@ namespace Budgeteer
                             .ThenByDescending(e => e.expID)
                             .ToList();
 
+                        decimal totalExpenses = groupExpenses.Sum(
+                            expense => expense.convertedAmount
+                        );
+
+                        Console.WriteLine();
+                        Console.WriteLine(
+                            $"Total expenses: {totalExpenses:F2} {group.Currency}"
+                        );
 
 
                         if (groupExpenses.Count == 0)
