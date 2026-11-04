@@ -905,7 +905,6 @@ namespace Budgeteer
                                             convertedAmount = expAmountInput / fromRate * toRate;
 
                                             Console.WriteLine();
-                                            Console.WriteLine($"Exchange rate base currency: {baseCurrency}");
                                             Console.WriteLine(
                                                 $"Original amount: {expAmountInput:F2} {expCurrencyInput}"
                                             );
