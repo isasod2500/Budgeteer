@@ -239,6 +239,7 @@ namespace Budgeteer
                 while (true)
                 {
                     Console.Clear();
+                    Console.WriteLine("\x1b[3J");
                     //text.
                     Console.WriteLine();
                     Console.WriteLine("B U D G E T E E R");
@@ -317,6 +318,7 @@ namespace Budgeteer
                         case "C":
                             {
                                 Console.Clear();
+                                Console.WriteLine("\x1b[3J");
                                 Console.WriteLine("Create group");
                                 Console.WriteLine("Press ESC to cancel.");
                                 Console.WriteLine();
@@ -397,6 +399,7 @@ namespace Budgeteer
                         case "E":
                             {
                                 Console.Clear();
+                                Console.WriteLine("\x1b[3J");
                                 Console.WriteLine("Edit group");
                                 Console.WriteLine();
 
@@ -456,6 +459,7 @@ namespace Budgeteer
                                 Group selectedGroup = groupList.groups[editGroupIndex];
 
                                 Console.Clear();
+                                Console.WriteLine("\x1b[3J");
                                 Console.WriteLine("Edit group");
                                 Console.WriteLine("Press ENTER to keep the current value.");
                                 Console.WriteLine("Press ESC to cancel editing.");
@@ -542,6 +546,7 @@ namespace Budgeteer
                             }
                         case "D":
                             Console.Clear();
+                            Console.WriteLine("\x1b[3J");
                             Console.WriteLine("Delete group option selected.");
                             Console.WriteLine("Choose group to delete using numpad.");
                             Console.WriteLine();
@@ -627,6 +632,7 @@ namespace Budgeteer
                             static async Task DeleteMenu(Group group, GroupList groupList, ExpenseList expenseList)
                             {
                                 Console.Clear();
+                                Console.WriteLine("\x1b[3J");
                                 Console.WriteLine($"Delete group: {group.Name}");
                                 Console.WriteLine("Y = Confirm deletion");
                                 Console.WriteLine("ESC = Cancel");
@@ -669,6 +675,7 @@ namespace Budgeteer
                     while (true)
                     {
                         Console.Clear();
+                        Console.WriteLine("\x1b[3J");
                         Console.WriteLine();
 
                         Console.WriteLine("B U D G E T E E R");
@@ -785,6 +792,7 @@ namespace Budgeteer
                             case "C":
                                 {
                                     Console.Clear();
+                                    Console.WriteLine("\x1b[3J");
                                     Console.WriteLine("Create new expense");
                                     Console.WriteLine();
 
@@ -1012,6 +1020,7 @@ namespace Budgeteer
                             while (true)
                             {
                                 Console.Clear();
+                                Console.WriteLine("\x1b[3J");
 
                                 Console.WriteLine("Expense details");
                                 Console.WriteLine();
@@ -1025,15 +1034,19 @@ namespace Budgeteer
                                 Console.WriteLine("ESC. Back to group");
 
                                 Console.WriteLine();
-                                Console.Write("Enter option here: ");
+                                string? userInput = ReadInputOrCancel("Enter option here: ");
 
-                                var userInput = Console.ReadKey(true);
+                                if (userInput == null)
+                                    return;
 
-                                switch (userInput.Key)
+                                userInput = userInput.Trim().ToUpperInvariant();
+
+                                switch (userInput)
                                 {
-                                    case ConsoleKey.E:
+                                    case "E":
                                         {
                                             Console.Clear();
+                                            Console.WriteLine("\x1b[3J");
                                             Console.WriteLine("Edit expense");
                                             Console.WriteLine("Press ENTER to keep the current value.");
                                             Console.WriteLine("Press ESC to cancel editing.");
@@ -1157,7 +1170,7 @@ namespace Budgeteer
                                             break;
                                         }
 
-                                    case ConsoleKey.D:
+                                    case "D":
                                         {
                                             Console.WriteLine();
                                             Console.WriteLine($"Delete expense '{expense.expName}'?");
@@ -1181,9 +1194,6 @@ namespace Budgeteer
 
                                             break;
                                         }
-
-                                    case ConsoleKey.Escape:
-                                        return;
 
                                     default:
                                         Console.WriteLine("Invalid option.");
