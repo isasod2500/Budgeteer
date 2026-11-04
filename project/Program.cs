@@ -1,279 +1,1215 @@
 ﻿using System;
 using System.Text.Json;
-using System.Text.Json.Serialization;
+using System.Linq;
 
 namespace Budgeteer
 {
 
+    //Deklarerar klasser
+
+    //Lista för grupper
     class GroupList
     {
         public List<Group> groups = new List<Group>();
     }
 
-    class Group {
+    //Objekt för grupp, som i sin tur ska lagras i GroupList
+    class Group
+    {
+        public int groupID { get; set; }
         public string Name { get; set; }
         public string[] Members { get; set; }
+        public string Currency { get; set; }
     }
 
-    class ExpenseList {
+    //Lista för utgifter, expenses
+    class ExpenseList
+    {
         public List<Expense> expenses = new List<Expense>();
     }
 
+    //Objekt för Expense, som i sin tur lagras i expenselist.
     class Expense
     {
+        public int groupID { get; set; }
+        public int expID { get; set; }
         public string expName { get; set; }
         public string[] expMembers { get; set; }
-        public string Currency { get; set; }
-        public decimal Amount { get; set; }
+        public string expCurrency { get; set; }
+        public decimal expAmount { get; set; }
+        public decimal convertedAmount { get; set; }
+        public string convertedCurrency { get; set; }
+
+        public DateTime expDate { get; set; } = DateTime.Today;
     }
-    class Program
+
+    class readEnv
     {
-        static void Main(string[] args)
+        public static void Load(string filePath)
+        {
+            if (!File.Exists(filePath))
+                throw new FileNotFoundException($"The file '{filePath}' does not exist.");
+
+            foreach (var line in File.ReadAllLines(filePath))
+            {
+                if (string.IsNullOrWhiteSpace(line) || line.StartsWith("#"))
+                    continue;
+
+                var parts = line.Split('=', 2);
+                if (parts.Length != 2)
+                {
+                    continue;
+                }
+
+                var key = parts[0].Trim();
+                var value = parts[1].Trim();
+                Environment.SetEnvironmentVariable(key, value);
+            }
+        }
+
+        public static async Task<string> fetchAPI()
         {
 
-            //Skapa nya listor utefter klasserna ovan, och deras struktur.
-            GroupList groupList = new GroupList();
-            ExpenseList expenseList = new ExpenseList();
+            readEnv.Load(".env");
 
-            //Försök läs in textfiler med information. Catch längst ned som fångar felet.
-            try
+            string apiKey = Environment.GetEnvironmentVariable("API_KEY");
+            if (string.IsNullOrWhiteSpace(apiKey))
             {
-                if (File.Exists("groups.txt"))
-                {
-                    string json = File.ReadAllText("groups.txt");
-                    if (!string.IsNullOrWhiteSpace(json))
-                    {
-                        groupList.groups = JsonSerializer.Deserialize<List<Group>>(json);
-                    }
-                }
-
-                if (File.Exists("expenses.txt"))
-                {
-                    string json = File.ReadAllText("expenses.txt");
-                    if (!string.IsNullOrWhiteSpace(json))
-                    {
-                        expenseList.expenses = JsonSerializer.Deserialize<List<Expense>>(json);
-                    }
-                }
-
-                MainMenu(groupList, expenseList);
-            }
-            catch (Exception err)
-            {
-                Console.WriteLine(err.Message);
+                throw new InvalidOperationException("API_KEY MISSING");
             }
 
+            using var client = new HttpClient();
+
+            string url = $"https://api.fxratesapi.com/latest?api_key={apiKey}";
+
+            string body = await client.GetStringAsync(url);
+
+            return body;
 
         }
-        static void MainMenu(
-            GroupList groupList,
-            ExpenseList expenseList)
+
+        public static decimal ConvertCurrency(
+            decimal amount,
+            string fromCurrency,
+            string toCurrency,
+            Dictionary<string, decimal> rates)
+        {
+            if (fromCurrency == toCurrency)
+                return amount;
+
+            decimal fromRate = rates[fromCurrency];
+            decimal toRate = rates[toCurrency];
+
+            return amount / fromRate * toRate;
+        }
+
+        public static async Task<bool> IsValidCurrency(string currency)
+        {
+            if (string.IsNullOrWhiteSpace(currency))
+
+                return false;
+
+            currency = currency.Trim().ToUpperInvariant();
+
+            try
+            {
+                string body = await fetchAPI();
+
+                using JsonDocument doc = JsonDocument.Parse(body);
+
+                JsonElement rates = doc.RootElement.GetProperty("rates");
+
+                return rates.TryGetProperty(currency, out _);
+
+
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+
+
+        class Program
         {
 
-
-
-            //True är alltid true, så detta körs hela tiden. 
-            while (true)
+            static async Task Main(string[] args)
             {
-                Console.Clear();
-                //text.
-                Console.WriteLine();
-                Console.WriteLine("B U D G E T E E R");
-                Console.WriteLine("Manage your expenses with your friends; split, calculate and settle.");
 
-                Console.WriteLine();
-                Console.WriteLine();
 
-                Console.WriteLine("Use the numbers and letters indicated below to navigate the application.");
+                //Skapa nya listor utefter klasserna ovan, och deras struktur.
+                GroupList groupList = new GroupList();
+                ExpenseList expenseList = new ExpenseList();
 
-                Console.WriteLine();
-
-                Console.WriteLine("Your groups:");
-
-                Console.WriteLine();
-
-                if (groupList.groups.Count == 0)
+                //Försök läs in textfiler med information. Catch längst ned som fångar felet.
+                try
                 {
-                    Console.WriteLine("No groups yet created. Press C to start creating!");
-                }
-                else
-                {
-                    for (int i = 0; i < groupList.groups.Count; i++)
+
+                    if(!File.Exists(".env"))
+{
+                        Console.WriteLine("Warning: .env file is missing.");
+                        Console.WriteLine("Currency conversion will not be available.");
+                    }
+                    else
                     {
-                        var group = groupList.groups[i];
-                        Console.WriteLine($"[{i}] {group.Name}");
+                        readEnv.Load(".env");
+                    }
+
+
+                    if (File.Exists("groups.txt"))
+                    {
+                        string json = File.ReadAllText("groups.txt");
+                        if (!string.IsNullOrWhiteSpace(json))
+                        {
+                            groupList.groups = JsonSerializer.Deserialize<List<Group>>(json);
+                        }
+                    }
+
+                    if (File.Exists("expenses.txt"))
+                    {
+                        string json = File.ReadAllText("expenses.txt");
+                        if (!string.IsNullOrWhiteSpace(json))
+                        {
+                            expenseList.expenses = JsonSerializer.Deserialize<List<Expense>>(json);
+                        }
+                    }
+
+                    await MainMenu(groupList, expenseList);
+                }
+                catch (Exception err)
+                {
+                    Console.WriteLine(err.Message);
+                    Console.ReadKey();
+                }
+            }
+
+            static string ReadInputOrCancel(string prompt)
+            {
+
+                Console.Write(prompt);
+                string input = "";
+
+                while (true)
+                {
+                    ConsoleKeyInfo key = Console.ReadKey(true);
+
+                    // Avbryt inmatningen med ESC
+                    if (key.Key == ConsoleKey.Escape)
+                    {
+                        Console.WriteLine();
+                        return null;
+                    }
+
+                    // Avsluta inmatningen med ENTER
+                    else if (key.Key == ConsoleKey.Enter)
+                    {
+                        Console.WriteLine();
+                        return input;
+                    }
+
+                    // Ta bort det senaste tecknet med BACKSPACE
+                    else if (key.Key == ConsoleKey.Backspace)
+                    {
+                        if (input.Length > 0)
+                        {
+                            input = input.Substring(0, input.Length - 1);
+                            Console.Write("\b \b");
+                        }
+                    }
+
+                    // Lägg till vanliga tecken
+                    else if (!char.IsControl(key.KeyChar))
+                    {
+                        input += key.KeyChar;
+                        Console.Write(key.KeyChar);
                     }
                 }
 
-                Console.WriteLine();
-                Console.WriteLine();
+            }
 
-                Console.WriteLine("E. Edit group");
-                Console.WriteLine("C. Create group");
-                Console.WriteLine("D. Delete group");
-                Console.WriteLine("ESC. Close application");
 
-                Console.WriteLine();
-                Console.WriteLine();
+            //Main menu funktion. Denna kallas automatiskt, förutsatt att .txt filerna hittas.
+            static async Task MainMenu(
+                GroupList groupList,
+                ExpenseList expenseList)
+            {
 
-                //Tar användarens val
-                Console.Write("Enter option here: ");
-                var userInput = Console.ReadKey(true);
-
-                //Gruppval, index 0-9
-                if (char.IsDigit(userInput.KeyChar) &&
-                    userInput.KeyChar >= '0' &&
-                    userInput.KeyChar <= '9')
+                //True är alltid true, så detta körs hela tiden. 
+                while (true)
                 {
+                    Console.Clear();
+                    Console.WriteLine("\x1b[3J");
+                    //text.
+                    Console.WriteLine();
+                    Console.WriteLine("B U D G E T E E R");
+                    Console.WriteLine("Manage your expenses with your friends; split, calculate and settle.");
 
-                    int groupIndex = userInput.KeyChar - '0';
+                    Console.WriteLine();
+                    Console.WriteLine();
 
-                    if (groupIndex < groupList.groups.Count)
+                    Console.WriteLine("Use the numbers and letters indicated below to navigate the application.");
+
+                    Console.WriteLine();
+
+                    Console.WriteLine("Your groups:");
+
+                    Console.WriteLine();
+
+                    //Om inga grupper finns, skriv ut en kommentar. Annars ladda samtliga grupper.
+                    if (groupList.groups.Count == 0)
                     {
-                        GroupMenu(
-                            groupList.groups[groupIndex],
-                            expenseList);
-
+                        Console.WriteLine("No groups yet created. Press C to start creating!");
                     }
-                }
-                else
-                {
+                    else
+                    {
+                        for (int i = 0; i < groupList.groups.Count; i++)
+                        {
+                            var listedGroup = groupList.groups[i];
+                            Console.WriteLine($"[{i + 1}] {listedGroup.Name}");
+                        }
+                    }
+
+                    Console.WriteLine();
+                    Console.WriteLine();
+
+                    Console.WriteLine("E. Edit group");
+                    Console.WriteLine("C. Create group");
+                    Console.WriteLine("D. Delete group");
+                    Console.WriteLine("ESC. Close application");
+
+                    Console.WriteLine();
+                    Console.WriteLine();
+
+                    //Tar användarens val
+                    string? userInput = ReadInputOrCancel("Enter option here: ");
+
+                    if (userInput == null)
+                        return;
+
+                    userInput = userInput.Trim();
+
+                    //Gruppval, index 0-9
+                    if (int.TryParse(userInput, out int groupNumber))
+                    {
+                        int groupIndex = groupNumber - 1;
+
+                        if (groupIndex >= 0 &&
+                            groupIndex < groupList.groups.Count)
+                        {
+                            await GroupMenu(
+                                groupList.groups[groupIndex],
+                                groupList,
+                                expenseList);
+                        }
+                        else
+                        {
+                            Console.WriteLine("Invalid group number.");
+                            Console.ReadKey(true);
+                        }
+
+                        continue;
+                    }
+
                     //Switch-case för redigering av grupper
-                    switch (userInput.Key)
+                    switch (userInput.ToUpperInvariant())
                     {
 
-                        case ConsoleKey.E:
-                            Console.WriteLine("Edit group option selected.");
-                            break;
-                        case ConsoleKey.C:
-                            Console.WriteLine("Create Group");
-                            Console.Write("Enter groupname: ");
-                            string groupname = Console.ReadLine();
-
-                            Console.Clear();
-                            Console.WriteLine("Create Group");
-                            Console.Write("Enter members (separate with commas): ");
-                            string memberInput = Console.ReadLine();
-
-                            if (!string.IsNullOrWhiteSpace(groupname) &&
-                                !string.IsNullOrWhiteSpace(memberInput))
+                        case "C":
                             {
-                                string[] members = memberInput.Split(',',
+                                Console.Clear();
+                                Console.WriteLine("\x1b[3J");
+                                Console.WriteLine("Create group");
+                                Console.WriteLine("Press ESC to cancel.");
+                                Console.WriteLine();
+
+                                string? groupName = ReadInputOrCancel("Enter group name (3 - 25 characters): ");
+
+                                if (groupName == null)
+                                    break;
+
+                                if (groupName.Length > 25 ||
+                                    groupName.Length < 3)
+                                {
+                                    Console.WriteLine("Group name has to be longer than 3 characters and shorter than 25 characters");
+                                    Console.ReadKey(true);
+                                    break;
+                                }
+
+                                if (string.IsNullOrWhiteSpace(groupName))
+                                {
+                                    Console.WriteLine("Group name cannot be empty.");
+                                    Console.ReadKey(true);
+                                    break;
+                                }
+
+                                string? membersInput = ReadInputOrCancel("Enter members (separated by commas): ");
+
+                                if (membersInput == null)
+                                    break;
+
+                                string[] members = membersInput.Split(
+                                    ',',
                                     StringSplitOptions.TrimEntries |
-                                    StringSplitOptions.RemoveEmptyEntries
-                                    );
+                                    StringSplitOptions.RemoveEmptyEntries);
+
+                                if (members.Length == 0)
+                                {
+                                    Console.WriteLine("You must enter at least one member.");
+                                    Console.ReadKey(true);
+                                    break;
+                                }
+
+                                string? currencyInput = ReadInputOrCancel("Enter currency (e.g. EUR, USD, SEK): ");
+
+                                if (currencyInput == null)
+                                    break;
+
+                                string currency = currencyInput.Trim().ToUpperInvariant();
+
+                                if (!await readEnv.IsValidCurrency(currency))
+                                {
+                                    Console.WriteLine("Invalid currency.");
+                                    Console.ReadKey(true);
+                                    break;
+                                }
+
+                                // Skapa ett unikt grupp-ID
+                                int newGroupID = groupList.groups.Count == 0
+                                    ? 1
+                                    : groupList.groups.Max(g => g.groupID) + 1;
 
                                 Group newGroup = new Group
                                 {
-                                    Name = groupname,
-                                    Members = members
+                                    groupID = newGroupID,
+                                    Name = groupName.Trim(),
+                                    Members = members,
+                                    Currency = currency
                                 };
 
                                 groupList.groups.Add(newGroup);
 
-                                var jsonAdd = JsonSerializer.Serialize(groupList.groups);
+                                string json = JsonSerializer.Serialize(groupList.groups);
+                                await File.WriteAllTextAsync("groups.txt", json);
 
-                                File.WriteAllText("groups.txt", jsonAdd);
+                                Console.WriteLine("Group created successfully!");
+                                Console.ReadKey(true);
+                                break;
                             }
-                            break;
-                        case ConsoleKey.D:
+                        case "E":
+                            {
+                                Console.Clear();
+                                Console.WriteLine("\x1b[3J");
+                                Console.WriteLine("Edit group");
+                                Console.WriteLine();
+
+                                if (groupList.groups.Count == 0)
+                                {
+                                    Console.WriteLine("There are no groups to edit.");
+                                    Console.ReadKey(true);
+                                    break;
+                                }
+
+                                // Visa alla grupper
+                                for (int i = 0; i < groupList.groups.Count; i++)
+                                {
+                                    var listedGroup = groupList.groups[i];
+                                    Console.WriteLine($"[{i + 1}] {listedGroup.Name}");
+                                }
+
+                                Console.WriteLine();
+                                Console.WriteLine("Choose a group to edit.");
+                                Console.WriteLine("Press ESC to cancel.");
+
+                                var editInput = Console.ReadKey(true);
+
+                                if (editInput.Key == ConsoleKey.Escape)
+                                    break;
+
+                                int editGroupNumber = 0;
+
+                                if (editInput.Key >= ConsoleKey.D1 &&
+                                    editInput.Key <= ConsoleKey.D9)
+                                {
+                                    editGroupNumber = editInput.KeyChar - '0';
+                                }
+                                else if (editInput.Key >= ConsoleKey.NumPad1 &&
+                                         editInput.Key <= ConsoleKey.NumPad9)
+                                {
+                                    editGroupNumber = editInput.Key - ConsoleKey.NumPad0;
+                                }
+                                else
+                                {
+                                    Console.WriteLine("Please enter a group number.");
+                                    Console.ReadKey(true);
+                                    break;
+                                }
+
+                                int editGroupIndex = editGroupNumber - 1;
+
+                                if (editGroupIndex < 0 ||
+                                    editGroupIndex >= groupList.groups.Count)
+                                {
+                                    Console.WriteLine("Invalid group number.");
+                                    Console.ReadKey(true);
+                                    break;
+                                }
+
+                                // Hämta gruppen som ska redigeras
+                                Group selectedGroup = groupList.groups[editGroupIndex];
+
+                                Console.Clear();
+                                Console.WriteLine("\x1b[3J");
+                                Console.WriteLine("Edit group");
+                                Console.WriteLine("Press ENTER to keep the current value.");
+                                Console.WriteLine("Press ESC to cancel editing.");
+                                Console.WriteLine();
+
+                                string? groupNameInput = ReadInputOrCancel(
+                                    $"Group name ({selectedGroup.Name}): ");
+
+                                if (groupNameInput == null)
+                                    break;
+
+                                string? groupMembersInput = ReadInputOrCancel(
+                                    $"Members ({string.Join(", ", selectedGroup.Members)}): ");
+
+                                if (groupMembersInput == null)
+                                    break;
+
+                                string? groupCurrencyInput = ReadInputOrCancel(
+                                    $"Currency ({selectedGroup.Currency}): ");
+
+                                if (groupCurrencyInput == null)
+                                    break;
+
+                                // Hantera gruppens namn
+                                string newName;
+
+                                if (string.IsNullOrWhiteSpace(groupNameInput))
+                                    newName = selectedGroup.Name;
+                                else
+                                    newName = groupNameInput.Trim();
+
+                                // Hantera gruppens medlemmar
+                                string[] newMembers;
+
+                                if (string.IsNullOrWhiteSpace(groupMembersInput))
+                                    newMembers = selectedGroup.Members;
+                                else
+                                    newMembers = groupMembersInput.Split(
+                                        ',',
+                                        StringSplitOptions.TrimEntries |
+                                        StringSplitOptions.RemoveEmptyEntries);
+
+                                // Hantera gruppens valuta
+                                string newCurrency;
+
+                                if (string.IsNullOrWhiteSpace(groupCurrencyInput))
+                                    newCurrency = selectedGroup.Currency;
+                                else
+                                    newCurrency = groupCurrencyInput.Trim().ToUpperInvariant();
+
+                                // Validera informationen
+                                if (string.IsNullOrWhiteSpace(newName))
+                                {
+                                    Console.WriteLine("Group name cannot be empty.");
+                                    Console.ReadKey(true);
+                                    break;
+                                }
+
+                                if (newMembers.Length == 0)
+                                {
+                                    Console.WriteLine("You must enter at least one member.");
+                                    Console.ReadKey(true);
+                                    break;
+                                }
+
+                                if (!await readEnv.IsValidCurrency(newCurrency))
+                                {
+                                    Console.WriteLine("Invalid currency.");
+                                    Console.ReadKey(true);
+                                    break;
+                                }
+
+                                // Spara ändringarna
+                                selectedGroup.Name = newName;
+                                selectedGroup.Members = newMembers;
+                                selectedGroup.Currency = newCurrency;
+
+                                string json = JsonSerializer.Serialize(groupList.groups);
+                                await File.WriteAllTextAsync("groups.txt", json);
+
+                                Console.WriteLine("Group updated successfully!");
+                                Console.ReadKey(true);
+                                break;
+                            }
+                        case "D":
+                            Console.Clear();
+                            Console.WriteLine("\x1b[3J");
                             Console.WriteLine("Delete group option selected.");
+                            Console.WriteLine("Choose group to delete using numpad.");
+                            Console.WriteLine();
+                            Console.WriteLine();
+
+                            if (groupList.groups.Count == 0)
+                            {
+                                Console.WriteLine("There are no groups to delete");
+                                Console.WriteLine();
+                                Console.WriteLine("Press any key to continue...");
+                                Console.ReadKey(true);
+                                break;
+                            }
+
+
+
+                            for (int i = 0; i < groupList.groups.Count; i++)
+                            {
+                                var listedGroup = groupList.groups[i];
+                                Console.WriteLine($"[{i + 1}] {listedGroup.Name}");
+                            }
+                            Console.WriteLine();
+                            Console.WriteLine("Press ESC to cancel.");
+
+                            var delInput = Console.ReadKey(true);
+
+                            if (delInput.Key == ConsoleKey.Escape)
+                                break;
+
+                            if (delInput.Key >= ConsoleKey.D1 &&
+                                delInput.Key <= ConsoleKey.D9)
+                            {
+                                int delGroupNumber = delInput.KeyChar - '0';
+                                int delGroupIndex = delGroupNumber - 1;
+
+                                if (delGroupIndex >= 0 &&
+                                    delGroupIndex < groupList.groups.Count)
+                                {
+                                    await DeleteMenu(
+                                        groupList.groups[delGroupIndex],
+                                        groupList,
+                                        expenseList);
+                                }
+                                else
+                                {
+                                    Console.WriteLine("Invalid group number.");
+                                    Console.ReadKey(true);
+                                }
+                            }
+                            else if (delInput.Key >= ConsoleKey.NumPad1 &&
+                                     delInput.Key <= ConsoleKey.NumPad9)
+                            {
+                                int delGroupNumber = delInput.Key - ConsoleKey.NumPad0;
+                                int delGroupIndex = delGroupNumber - 1;
+
+                                if (delGroupIndex >= 0 &&
+                                    delGroupIndex < groupList.groups.Count)
+                                {
+                                    await DeleteMenu(
+                                        groupList.groups[delGroupIndex],
+                                        groupList,
+                                        expenseList);
+                                }
+                                else
+                                {
+                                    Console.WriteLine("Invalid group number.");
+                                    Console.ReadKey(true);
+                                }
+                            }
+                            else
+                            {
+                                Console.WriteLine("Please enter a group number.");
+                                Console.ReadKey(true);
+                            }
+
                             break;
-                        case ConsoleKey.Escape:
-                            return; // Exit the application
+
+                      
                         default:
                             Console.WriteLine("Invalid option. Please try again.");
                             break;
+
+                            static async Task DeleteMenu(Group group, GroupList groupList, ExpenseList expenseList)
+                            {
+                                Console.Clear();
+                                Console.WriteLine("\x1b[3J");
+                                Console.WriteLine($"Delete group: {group.Name}");
+                                Console.WriteLine("Y = Confirm deletion");
+                                Console.WriteLine("ESC = Cancel");
+
+                                var input = Console.ReadKey(true);
+
+                                if (input.Key == ConsoleKey.Y)
+                                {
+
+                                    int groupID = group.groupID;
+
+                                    int removedExpenses = expenseList.expenses.RemoveAll(
+                                        expense => expense.groupID == groupID);
+                                    groupList.groups.Remove(group);
+
+                                    string groupsJson = JsonSerializer.Serialize(groupList.groups);
+                                    string expensesJson = JsonSerializer.Serialize(expenseList.expenses);
+                                    await File.WriteAllTextAsync("groups.txt", groupsJson);
+                                    await File.WriteAllTextAsync("expenses.txt", expensesJson);
+
+                                    Console.WriteLine("Group and its expenses deleted successfully.");
+                                    Console.WriteLine($"Expenses deleted: {removedExpenses}");
+                                }
+                                else
+                                {
+                                    Console.WriteLine("Deletion cancelled.");
+                                }
+
+                                Console.ReadKey(true);
+                            }
                     }
                 }
-            }
-        }
-        static void GroupMenu(
-            Group group,
-            ExpenseList expenseList)
-        {
-            while (true)
-            {
-                Console.Clear();
-                Console.WriteLine();
-
-                Console.WriteLine("B U D G E T E E R");
-
-                Console.WriteLine();
-                Console.WriteLine();
-
-                Console.WriteLine($"Group: {group.Name}");
-
-                Console.WriteLine();
-
-                Console.WriteLine(
-                    $"Members: {string.Join(", ", group.Members)}"
-                    );
-
-                for (var i = 0; i < expenseList.expenses.Count; i++)
+                //Undermeny för att se gruppen och dess medlemmar och utgifter.
+                static async Task GroupMenu(
+                    Group group,
+                    GroupList groupList,
+                    ExpenseList expenseList
+                    )
                 {
-                    Console.WriteLine(i);
-                }
-
-                Console.WriteLine();
-                Console.WriteLine("Expenses:");
-                Console.WriteLine("Enter number corresponding to expense to view expense in detail");
-
-
-                Console.WriteLine();
-                Console.WriteLine();
-
-                
-                Console.WriteLine("C. Create expense");
-
-                Console.WriteLine("ESC. Back to start");
-
-                Console.WriteLine();
-                Console.WriteLine();
-
-                //Tar användarens val
-                Console.Write("Enter option here: ");
-                var userInput = Console.ReadKey(true);
-
-                if (char.IsDigit(userInput.KeyChar) &&
-                    userInput.KeyChar >= '0' &&
-                    userInput.KeyChar <= '9')
-                {
-                    int expenseIndex = userInput.KeyChar - '0';
-
-                    if (expenseIndex < expenseList.expenses.Count)
+                    while (true)
                     {
-                        ExpenseMenu(expenseList.expenses[expenseIndex]);
+                        Console.Clear();
+                        Console.WriteLine("\x1b[3J");
+                        Console.WriteLine();
+
+                        Console.WriteLine("B U D G E T E E R");
+
+                        Console.WriteLine();
+                        Console.WriteLine();
+
+                        Console.WriteLine($"Group: {group.Name}");
+
+                        Console.WriteLine(
+                            $"Members: {string.Join(", ", group.Members)}"
+                            );
+
+                        Console.WriteLine($"Currency: {group.Currency}");
+
+                        Console.WriteLine();
+                        Console.WriteLine();
+
+
+                        var groupExpenses = expenseList.expenses
+                            .Where(e => e.groupID == group.groupID)
+                            .OrderByDescending(e => e.expDate)
+                            .ThenByDescending(e => e.expID)
+                            .ToList();
+
+                        decimal totalExpenses = groupExpenses.Sum(
+                            expense => expense.convertedAmount
+                        );
+
+                        Console.WriteLine();
+                        Console.WriteLine(
+                            $"Total expenses: {totalExpenses:F2} {group.Currency}"
+                        );
+
+
+                        if (groupExpenses.Count == 0)
+                        {
+                            Console.Write("No expenses yet. Press C to start creating!");
+                            Console.WriteLine();
+                            Console.WriteLine();
+
+                        }
+                        else
+                        {
+                            Console.WriteLine("Enter number to view expense details");
+
+                            Console.WriteLine();
+                            Console.WriteLine();
+
+
+                            for (int i = 0; i < groupExpenses.Count; i++)
+                            {
+                                var expense = groupExpenses[i];
+
+                                Console.WriteLine(
+                                    $"[{i + 1}] {expense.expDate:yyyy-MM-dd} - " +
+                                    $"{expense.expName} " +
+                                    $"{Math.Round(expense.convertedAmount, 2)} " +
+                                    $"{expense.convertedCurrency}"
+                                );
+                                Console.WriteLine();
+                            }
+                        }
+
+                       
+
+
+
+
+                        Console.WriteLine();
+                        Console.WriteLine();
+
+
+                        Console.WriteLine("C. Create expense");
+
+                        Console.WriteLine("ESC. Back to start");
+
+                        Console.WriteLine();
+                        Console.WriteLine();
+
+                        //Tar användarens val
+                        string? userInput = ReadInputOrCancel("Enter option here: ");
+
+                        if (userInput == null)
+                            return;
+
+                        userInput = userInput.Trim();
+
+                        if (int.TryParse(userInput, out int expenseNumber))
+                        {
+                            int expenseIndex = expenseNumber - 1;
+
+                            if (expenseIndex >= 0 &&
+                                expenseIndex < groupExpenses.Count)
+                            {
+                                await ExpenseMenu(
+                                    groupExpenses[expenseIndex],
+                                    expenseList);
+                            }
+                            else
+                            {
+                                Console.WriteLine("Invalid expense number.");
+                                Console.ReadKey(true);
+                            }
+
+                            continue;
+                        }
+
+
+                        //Switch-case för redigering av utgifter
+                        switch (userInput.ToUpperInvariant())
+                        {
+
+                            case "C":
+                                {
+                                    Console.Clear();
+                                    Console.WriteLine("\x1b[3J");
+                                    Console.WriteLine("Create new expense");
+                                    Console.WriteLine();
+
+                                    //Ange gruppnamn
+                                    string? expNameInput = ReadInputOrCancel("Enter expense name: ");
+
+                                    if (expNameInput == null)
+                                        break;
+
+                                    if (string.IsNullOrWhiteSpace(expNameInput))
+                                    {
+                                        Console.WriteLine("Expense name cannot be empty.");
+                                        Console.ReadKey();
+                                        break;
+                                    }
+
+                                    //Ange gruppmedlemmar
+                                    string? expMembersInput = ReadInputOrCancel(
+                                        "Enter members to share expense (comma separated): ");
+
+                                    if (expMembersInput == null)
+                                        break;
+
+                                    string[] expMembers = expMembersInput.Split(
+                                        ',',
+                                        StringSplitOptions.TrimEntries |
+                                        StringSplitOptions.RemoveEmptyEntries
+                                    );
+
+                                    if (expMembers.Length == 0)
+                                    {
+                                        Console.WriteLine("You must enter at least one member.");
+                                        Console.ReadKey();
+                                        break;
+                                    }
+
+                                    //Ange valuta
+                                    string? expCurrencyInput = ReadInputOrCancel(
+                                        "Enter currency (USD, EUR, GBP etc): ");
+
+                                    if (expCurrencyInput == null)
+                                        break;
+
+                                    expCurrencyInput = expCurrencyInput.Trim().ToUpperInvariant();
+
+                                    if (expCurrencyInput.Length != 3)
+                                    {
+                                        Console.WriteLine("Enter a valid three-letter currency code.");
+                                        Console.ReadKey();
+                                        break;
+                                    }
+
+                                    Console.WriteLine();
+                                    Console.WriteLine(
+                                        $"Expenses will be converted to the group's currency ({group.Currency})."
+                                    );
+
+                                    //Ange belopp
+                                    string? amountInput = ReadInputOrCancel("Enter expense amount: ");
+
+                                    if (amountInput == null)
+                                        break;
+
+                                    if (!decimal.TryParse(amountInput, out decimal expAmountInput)
+                                        || expAmountInput < 0)
+                                    {
+                                        Console.WriteLine("Invalid amount.");
+                                        Console.ReadKey();
+                                        break;
+                                    }
+
+                                    //Börja med originalbeloppet.
+                                    //Om valutan är samma som gruppens behövs ingen konvertering.
+                                    decimal convertedAmount = expAmountInput;
+
+                                    //Konvertera valutan om det behövs
+                                    if (!string.Equals(
+                                        expCurrencyInput,
+                                        group.Currency,
+                                        StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        try
+                                        {
+                                            string body = await readEnv.fetchAPI();
+
+                                            using JsonDocument doc = JsonDocument.Parse(body);
+
+                                            JsonElement root = doc.RootElement;
+                                            JsonElement rates = root.GetProperty("rates");
+
+                                            string? baseCurrency = root
+                                                .GetProperty("base")
+                                                .GetString();
+
+                                            if (!rates.TryGetProperty(
+                                                    expCurrencyInput, out JsonElement fromRateElement) ||
+                                                !rates.TryGetProperty(
+                                                    group.Currency, out JsonElement toRateElement))
+                                            {
+                                                Console.WriteLine(
+                                                    "One of the currencies was not found in the API."
+                                                );
+                                                Console.ReadKey();
+                                                break;
+                                            }
+
+                                            decimal fromRate = fromRateElement.GetDecimal();
+                                            decimal toRate = toRateElement.GetDecimal();
+
+                                            convertedAmount = expAmountInput / fromRate * toRate;
+
+                                            Console.WriteLine();
+                                            Console.WriteLine(
+                                                $"Original amount: {expAmountInput:F2} {expCurrencyInput}"
+                                            );
+                                            Console.WriteLine(
+                                                $"Converted amount: {convertedAmount:F2} {group.Currency}"
+                                            );
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            Console.WriteLine(
+                                                $"Currency conversion failed: {ex.Message}"
+                                            );
+                                            Console.ReadKey();
+                                            break;
+                                        }
+
+
+                                    }
+
+                                    Console.WriteLine();
+                                    Console.WriteLine("Enter expense date.");
+                                    Console.WriteLine("Leave empty to use todays date");
+                                    Console.WriteLine("Format: yyyy-MM-dd");
+
+                                    DateTime expenseDate;
+
+                                    while (true)
+                                    {
+                                        string? dateInput = ReadInputOrCancel(
+                                            $"Date ({DateTime.Today:yyyy-MM-dd}): ");
+
+                                        if (dateInput == null)
+                                        {
+                                            //ESC
+                                            return;
+                                        }
+
+                                        if (string.IsNullOrWhiteSpace(dateInput))
+                                        {
+                                            //Tom och ENTER = dagens datum
+                                            expenseDate = DateTime.Today;
+                                            break;
+                                        }
+
+                                        //kolla om input uppfyller datumets format
+                                        if (DateTime.TryParseExact(
+                                            dateInput,
+                                            "yyyy-MM-dd",
+                                            System.Globalization.CultureInfo.InvariantCulture,
+                                            System.Globalization.DateTimeStyles.None,
+                                            out expenseDate))
+                                        {
+                                            //Datumet är giltigt
+                                            break;
+                                        }
+
+                                        //Om inget krav uppfylls
+                                        Console.WriteLine("Date format invalid, please use 'yyyy-MM-dd'.");
+                                    }
+
+                                    // Bekräfta innan expense sparas
+                                    Console.WriteLine();
+                                    Console.WriteLine("Press ENTER to save this expense.");
+                                    Console.WriteLine("Press ESC to cancel.");
+
+                                    ConsoleKeyInfo confirmKey = Console.ReadKey(true);
+
+                                    if (confirmKey.Key != ConsoleKey.Enter)
+                                    {
+                                        Console.WriteLine("Expense creation cancelled.");
+                                        break;
+                                    }
+
+                                    //Skapa expense-objektet
+                                    Expense newExpense = new Expense
+                                    {
+                                        expID = expenseList.expenses
+                                            .Select(e => e.expID)
+                                            .DefaultIfEmpty(0)
+                                            .Max() + 1,
+
+                                        groupID = group.groupID,
+                                        expName = expNameInput.Trim(),
+                                        expMembers = expMembers,
+                                        expCurrency = expCurrencyInput,
+                                        expAmount = expAmountInput,
+                                        convertedAmount = convertedAmount,
+                                        convertedCurrency = group.Currency,
+                                        expDate = expenseDate
+                                    };
+
+                                    //Lägg till och spara
+                                    expenseList.expenses.Add(newExpense);
+
+                                    string jsonAdd = JsonSerializer.Serialize(expenseList.expenses);
+                                    File.WriteAllText("expenses.txt", jsonAdd);
+
+                                    Console.WriteLine("Expense saved successfully!");
+                                    Console.ReadKey();
+
+                                    break;
+                                }
+                            default:
+                                Console.WriteLine("Invalid option. Please try again.");
+                                break;
+                        }
+
+                        static async Task ExpenseMenu(
+                            Expense expense,
+                            ExpenseList expenseList)
+                        {
+                            while (true)
+                            {
+                                Console.Clear();
+                                Console.WriteLine("\x1b[3J");
+
+                                Console.WriteLine("Expense details");
+                                Console.WriteLine();
+                                Console.WriteLine($"Expense: {expense.expName}");
+                                Console.WriteLine($"Members: {string.Join(", ", expense.expMembers)}");
+                                Console.WriteLine($"Amount: {expense.expAmount:F2} {expense.expCurrency}");
+                                Console.WriteLine($"Converted amount: {expense.convertedAmount:F2} {expense.convertedCurrency}");
+                                Console.WriteLine();
+                                Console.WriteLine("E. Edit expense");
+                                Console.WriteLine("D. Delete expense");
+                                Console.WriteLine("ESC. Back to group");
+
+                                Console.WriteLine();
+                                string? userInput = ReadInputOrCancel("Enter option here: ");
+
+                                if (userInput == null)
+                                    return;
+
+                                userInput = userInput.Trim().ToUpperInvariant();
+
+                                switch (userInput)
+                                {
+                                    case "E":
+                                        {
+                                            Console.Clear();
+                                            Console.WriteLine("\x1b[3J");
+                                            Console.WriteLine("Edit expense");
+                                            Console.WriteLine("Press ENTER to keep the current value.");
+                                            Console.WriteLine("Press ESC to cancel editing.");
+                                            Console.WriteLine();
+
+                                            //Strängarna får vara tomma, det är så man inte gör en ändring.
+                                            string? expNameInput = ReadInputOrCancel(
+                                                $"Expense name ({expense.expName}): ");
+
+                                            if (expNameInput == null)
+                                                break;
+
+                                            string? expMembersInput = ReadInputOrCancel(
+                                                $"Members ({string.Join(", ", expense.expMembers)}): ");
+
+                                            if (expMembersInput == null)
+                                                break;
+
+                                            string? amountInput = ReadInputOrCancel(
+                                                $"Amount ({expense.expAmount:F2}): ");
+
+                                            if (amountInput == null)
+                                                break;
+
+                                            string newName;
+
+                                            if (string.IsNullOrWhiteSpace(expNameInput))
+                                            {
+                                                newName = expense.expName;
+                                            }
+                                            else
+                                            {
+                                                newName = expNameInput.Trim();
+                                            }
+
+                                            string[] newMembers;
+
+                                            if (string.IsNullOrWhiteSpace(expMembersInput))
+                                            {
+                                                newMembers = expense.expMembers;
+                                            }
+                                            else
+                                            {
+                                                newMembers = expMembersInput.Split(
+                                                    ',',
+                                                    StringSplitOptions.TrimEntries |
+                                                    StringSplitOptions.RemoveEmptyEntries);
+                                            }
+
+                                            decimal newAmount = expense.expAmount;
+
+                                            //Samma check som vanligt skapande av expense. Siffran måste vara giltig.
+                                            if (!string.IsNullOrWhiteSpace(amountInput))
+                                            {
+                                                if (!decimal.TryParse(amountInput, out newAmount) ||
+                                                    newAmount < 0)
+                                                {
+                                                    Console.WriteLine("Invalid amount.");
+                                                    Console.ReadKey(true);
+                                                    break;
+                                                }
+                                            }
+
+                                            //Måste skriva in åtminstone en medlem
+                                            if (newMembers.Length == 0)
+                                            {
+                                                Console.WriteLine("You must enter at least one member.");
+                                                Console.ReadKey(true);
+                                                break;
+                                            }
+
+                                            // Räkna om beloppet till gruppens valuta.
+                                            decimal newConvertedAmount = newAmount;
+
+                                            if (!string.Equals(
+                                                expense.expCurrency,
+                                                expense.convertedCurrency,
+                                                StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                try
+                                                {
+                                                    string body = await readEnv.fetchAPI();
+
+                                                    using JsonDocument doc = JsonDocument.Parse(body);
+                                                    JsonElement rates = doc.RootElement.GetProperty("rates");
+
+                                                    if (!rates.TryGetProperty(
+                                                            expense.expCurrency, out JsonElement fromRateElement) ||
+                                                        !rates.TryGetProperty(
+                                                            expense.convertedCurrency, out JsonElement toRateElement))
+                                                    {
+                                                        Console.WriteLine("Currency not found in API.");
+                                                        Console.ReadKey(true);
+                                                        break;
+                                                    }
+
+                                                    decimal fromRate = fromRateElement.GetDecimal();
+                                                    decimal toRate = toRateElement.GetDecimal();
+
+                                                    newConvertedAmount = newAmount / fromRate * toRate;
+                                                }
+                                                catch (Exception ex)
+                                                {
+                                                    Console.WriteLine($"Currency conversion failed: {ex.Message}");
+                                                    Console.ReadKey(true);
+                                                    break;
+                                                }
+                                            }
+
+                                            // Spara ändringarna i objektet.
+                                            expense.expName = newName;
+                                            expense.expMembers = newMembers;
+                                            expense.expAmount = newAmount;
+                                            expense.convertedAmount = newConvertedAmount;
+
+                                            string json = JsonSerializer.Serialize(expenseList.expenses);
+                                            await File.WriteAllTextAsync("expenses.txt", json);
+
+                                            Console.WriteLine("Expense updated successfully!");
+                                            Console.ReadKey(true);
+                                            break;
+                                        }
+
+                                    case "D":
+                                        {
+                                            Console.WriteLine();
+                                            Console.WriteLine($"Delete expense '{expense.expName}'?");
+                                            Console.WriteLine("Y = Confirm deletion");
+                                            Console.WriteLine("ESC = Cancel");
+
+                                            var confirmInput = Console.ReadKey(true);
+
+                                            if (confirmInput.Key == ConsoleKey.Y)
+                                            {
+                                                expenseList.expenses.Remove(expense);
+
+                                                string json = JsonSerializer.Serialize(expenseList.expenses);
+                                                await File.WriteAllTextAsync("expenses.txt", json);
+
+                                                Console.WriteLine("Expense deleted successfully!");
+                                                Console.ReadKey(true);
+
+                                                return;
+                                            }
+
+                                            break;
+                                        }
+
+                                    default:
+                                        Console.WriteLine("Invalid option.");
+                                        Console.ReadKey(true);
+                                        break;
+                                }
+                            }
+                        }
+
+
+
+
 
                     }
                 }
-                else
-                {
-                    Console.WriteLine("Invalid option");
-                }
-              
             }
-        }
-
-        static void ExpenseMenu(Expense expense) {
-            Console.Clear();
-
-            Console.WriteLine($"Expense: {expense.expName}");
-            Console.WriteLine($"Amount: {expense.Amount}");
-            Console.WriteLine($"Currency: {expense.Currency}");
-            Console.WriteLine(
-                $"Members: {string.Join(", ", expense.expMembers)}"
-            );
-
-            Console.WriteLine();
-            Console.WriteLine("Press any key to return.");
-            Console.ReadKey(true);
         }
 
     }
 }
-
-
-
-
-    
