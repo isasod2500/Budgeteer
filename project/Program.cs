@@ -146,7 +146,15 @@ namespace Budgeteer
                 try
                 {
 
-                    readEnv.Load(".env");
+                    if(!File.Exists(".env"))
+{
+                        Console.WriteLine("Warning: .env file is missing.");
+                        Console.WriteLine("Currency conversion will not be available.");
+                    }
+                    else
+                    {
+                        readEnv.Load(".env");
+                    }
 
 
                     if (File.Exists("groups.txt"))
@@ -313,10 +321,18 @@ namespace Budgeteer
                                 Console.WriteLine("Press ESC to cancel.");
                                 Console.WriteLine();
 
-                                string? groupName = ReadInputOrCancel("Enter group name: ");
+                                string? groupName = ReadInputOrCancel("Enter group name (3 - 25 characters): ");
 
                                 if (groupName == null)
                                     break;
+
+                                if (groupName.Length > 25 ||
+                                    groupName.Length < 3)
+                                {
+                                    Console.WriteLine("Group name has to be longer than 3 characters and shorter than 25 characters");
+                                    Console.ReadKey(true);
+                                    break;
+                                }
 
                                 if (string.IsNullOrWhiteSpace(groupName))
                                 {
